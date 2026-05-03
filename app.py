@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, send_file
 import swisseph as swe
 from PIL import Image, ImageDraw, ImageFont
 from flask import send_file
+import os
+
 app = Flask(__name__)
 
 # set ephemeris path
@@ -274,4 +276,5 @@ def chart():
 # RUN
 # -------------------------
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
