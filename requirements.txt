@@ -1,0 +1,4 @@
+flask
+pyswisseph
+matplotlib
+pillow
