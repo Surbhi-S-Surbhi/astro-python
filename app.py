@@ -256,7 +256,7 @@ def kundli():
         return jsonify({
             "planets": result,
             "lagna":   {"degree": lagna_degree, "sign": lagna_sign},
-            "chart": "http://10.0.2.2:3000/chart",
+            "chart": base_url + "/chart",
             "message": "Kundli + chart generated"
         })
 
