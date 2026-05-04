@@ -196,7 +196,9 @@ def generate_chart(house_data, lagna_sign):
     for (ex, ey) in [(O, O), (O+4*G-cs, O), (O, O+4*G-cs), (O+4*G-cs, O+4*G-cs)]:
         draw.rectangle([ex, ey, ex+cs, ey+cs], fill=ACCENT)
 
-    img.save("chart.png", dpi=(150, 150))
+    filename = f"chart_{int(time.time())}.png"
+    img.save(filename, dpi=(150, 150))
+    return filename
 
 
 # -------------------------
@@ -250,13 +252,13 @@ def kundli():
             house = house_map[info["sign"]]
             house_data[house].append(name)
 
-        generate_chart(house_data, lagna_sign)
+        filename = generate_chart(house_data, lagna_sign)
 
         base_url = request.host_url.rstrip('/')
         return jsonify({
             "planets": result,
             "lagna":   {"degree": lagna_degree, "sign": lagna_sign},
-            "chart": base_url + "/chart",
+            "chart": base_url + "/" + filename,
             "message": "Kundli + chart generated"
         })
 
@@ -267,10 +269,9 @@ def kundli():
 # -------------------------
 # CHART ROUTE
 # -------------------------
-@app.route('/chart')
-def chart():
-    return send_file("chart.png", mimetype='image/png')
-
+@app.route('/<filename>')
+def get_chart(filename):
+    return send_file(filename, mimetype='image/png')
 
 # -------------------------
 # RUN
