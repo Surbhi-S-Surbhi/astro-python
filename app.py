@@ -3,6 +3,9 @@ import swisseph as swe
 from PIL import Image, ImageDraw, ImageFont
 from flask import send_file
 import os
+import threading
+import time
+
 
 app = Flask(__name__)
 
@@ -253,12 +256,23 @@ def kundli():
             house_data[house].append(name)
 
         filename = generate_chart(house_data, lagna_sign)
+        file_path = os.path.join(os.getcwd(), filename)
+        def delete_file_later(path):
+            time.sleep(600)  # 10 minutes
+            if os.path.exists(path):
+                os.remove(path)
+                print("Deleted:", path)
 
+        threading.Thread(
+            target=delete_file_later,
+            args=(file_path,),
+            daemon=True   # 🔥 add this
+        ).start()
         base_url = request.host_url.rstrip('/')
         return jsonify({
             "planets": result,
             "lagna":   {"degree": lagna_degree, "sign": lagna_sign},
-            "chart": base_url + "/" + filename,
+            "chartUrl": base_url + "/" + filename,
             "message": "Kundli + chart generated"
         })
 
@@ -271,7 +285,15 @@ def kundli():
 # -------------------------
 @app.route('/<filename>')
 def get_chart(filename):
-    return send_file(filename, mimetype='image/png')
+    if not filename.startswith("chart_"):
+        return "Invalid file", 400
+
+    file_path = os.path.join(os.getcwd(), filename)
+
+    if os.path.exists(file_path):
+        return send_file(file_path, mimetype='image/png')
+    else:
+        return "Chart expired", 404
 
 # -------------------------
 # RUN
