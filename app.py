@@ -5,10 +5,26 @@ from flask import send_file
 import os
 import threading
 import time
-
-
+import uuid
+from datetime import datetime
+import json
+from astrology.dasha.interpretations import (
+    get_mahadasha_interpretation,
+    get_timeline_interpretation
+)
+from flask import Flask, request
+from astrology.dasha.engine import get_moon_longitude
+from astrology.dasha.engine import (
+    get_moon_longitude,
+    get_nakshatra,
+    get_dasha_lord,
+    calculate_balance_years,
+    generate_mahadasha_timeline,
+    get_current_mahadasha,
+    generate_antardashas,
+    get_current_antardasha
+)
 app = Flask(__name__)
-
 # set ephemeris path
 swe.set_ephe_path('./ephe')
 
@@ -16,9 +32,175 @@ swe.set_ephe_path('./ephe')
 # -------------------------
 # HOME ROUTE
 # -------------------------
-@app.route('/')
+# -------------------------
+# CURRENT DASHA API
+# -------------------------
+@app.route('/dasha/current', methods=['POST'])
 def home():
-    return "Backend is running 🚀"
+
+    print("API HIT")
+
+    data = request.json
+
+    birth = datetime(
+        data["year"],
+        data["month"],
+        data["day"],
+        data.get("hour", 0),
+        data.get("minute", 0)
+    )
+
+    # Moon longitude
+    moon_longitude = get_moon_longitude(
+        birth
+    )
+
+    # Nakshatra
+    nakshatra = get_nakshatra(
+        moon_longitude
+    )
+
+    # Dasha lord
+    dasha_lord = get_dasha_lord(
+        nakshatra
+    )
+
+    # Remaining years
+    balance_years = calculate_balance_years(
+        moon_longitude,
+        dasha_lord
+    )
+
+    # Full Mahadasha timeline
+    timeline = generate_mahadasha_timeline(
+        birth
+    )
+
+    # Current Mahadasha
+    current_mahadasha = get_current_mahadasha(
+        timeline
+    )
+
+    # Antardashas
+    antardashas = generate_antardashas(
+        current_mahadasha
+    )
+
+    # Current Antardasha
+    current_antardasha = get_current_antardasha(
+        antardashas
+    )
+
+    return jsonify({
+
+        "vartaman_mahadasha": {
+
+            "graha":
+                current_mahadasha["lord"],
+
+            "shuru_tithi":
+                current_mahadasha["start"].strftime(
+                    "%d %B %Y"
+                ),
+
+            "samapt_tithi":
+                current_mahadasha["end"].strftime(
+                    "%d %B %Y"
+                ),
+
+            "vivaran":
+                get_mahadasha_interpretation(
+                    current_mahadasha["lord"]
+                )
+        },
+
+        "vartaman_antardasha": {
+
+            "graha":
+                current_antardasha["lord"],
+
+            "shuru_tithi":
+                current_antardasha["start"].strftime(
+                    "%d %B %Y"
+                ),
+
+            "samapt_tithi":
+                current_antardasha["end"].strftime(
+                    "%d %B %Y"
+                )
+        }
+    })
+
+
+# -------------------------
+# MAHADASHA TIMELINE API
+# -------------------------
+@app.route('/dasha/mahadashas', methods=['POST'])
+def mahadasha_timeline():
+
+    data = request.json
+
+    birth = datetime(
+        data["year"],
+        data["month"],
+        data["day"],
+        data.get("hour", 0),
+        data.get("minute", 0)
+    )
+
+    moon_longitude = get_moon_longitude(
+        birth
+    )
+
+    nakshatra = get_nakshatra(
+        moon_longitude
+    )
+
+    dasha_lord = get_dasha_lord(
+        nakshatra
+    )
+
+    balance_years = calculate_balance_years(
+        moon_longitude,
+        dasha_lord
+    )
+
+    timeline = generate_mahadasha_timeline(
+        birth
+    )
+
+    formatted = []
+
+    for item in timeline:
+
+        formatted.append({
+
+            "mahadasha_graha":
+                item["lord"],
+
+            "shuru_tithi":
+                item["start"].strftime(
+                    "%d %B %Y"
+                ),
+
+            "samapt_tithi":
+                item["end"].strftime(
+                    "%d %B %Y"
+                ),
+
+            "avadhi_varsh":
+                round(
+                    (item["end"] - item["start"]).days / 365.25,
+                    2
+                ),
+
+            "vivaran":
+                get_timeline_interpretation(
+                    item["lord"]
+                )
+        })
+
+    return jsonify(formatted)
 
 
 # -------------------------
@@ -48,9 +230,28 @@ def get_house_mapping(lagna_sign):
 
 
 SHORT = {
-    "sun": "Su", "moon": "Mo", "mars": "Ma", "mercury": "Me",
-    "jupiter": "Ju", "venus": "Ve", "saturn": "Sa",
-    "rahu": "Ra", "ketu": "Ke"
+    "Sun":     "सू",
+    "Moon":    "चं",
+    "Mars":    "मं",
+    "Mercury": "बु",
+    "Jupiter": "गु",
+    "Venus":   "शु",
+    "Saturn":  "श",
+    "Rahu":    "रा",
+    "Ketu":    "के",
+    "Lagna":   "ल.",
+}
+SHORT_EN = {
+    "Sun":     "Su",
+    "Moon":    "Mo",
+    "Mars":    "Ma",
+    "Mercury": "Me",
+    "Jupiter": "Ju",
+    "Venus":   "Ve",
+    "Saturn":  "Sa",
+    "Rahu":    "Ra",
+    "Ketu":    "Ke",
+    "Lagna":   "As",
 }
 
 PLANET_COLORS = {
@@ -81,129 +282,239 @@ PLANETS = {
 # -------------------------
 # CHART GENERATOR
 # -------------------------
-def generate_chart(house_data, lagna_sign):
-    SIZE = 900
-    PAD  = 60
-    G    = (SIZE - 2 * PAD) // 4   # cell size = 195
-    O    = PAD                       # grid origin = 60
 
-    img  = Image.new('RGB', (SIZE, SIZE), '#FFFDF5')
+def _load_fonts(size_bold, size_normal, size_num):
+    """Try to load a font that supports Hindi Devanagari, else fall back."""
+    candidates_devanagari = [
+        "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "NotoSansDevanagari-Regular.ttf",
+        "Lohit-Devanagari.ttf",
+    ]
+    candidates_latin = [
+        "DejaVuSans-Bold.ttf",
+        "DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+
+    hindi_font_bold   = None
+    hindi_font_normal = None
+
+    for path in candidates_devanagari:
+        try:
+            hindi_font_bold   = ImageFont.truetype(path, size_bold)
+            hindi_font_normal = ImageFont.truetype(path, size_normal)
+            break
+        except Exception:
+            continue
+
+    latin_bold   = None
+    latin_normal = None
+    for path in candidates_latin:
+        try:
+            latin_bold   = ImageFont.truetype(path, size_bold)
+            latin_normal = ImageFont.truetype(path, size_normal)
+            break
+        except Exception:
+            continue
+
+    default = ImageFont.load_default()
+
+    # If we have a Devanagari font, use it; otherwise fall back to Latin
+    fBold   = hindi_font_bold   or latin_bold   or default
+    fNormal = hindi_font_normal or latin_normal or default
+    fNum    = latin_bold or default   # numbers are always Latin
+
+    use_hindi = hindi_font_bold is not None
+    return fBold, fNormal, fNum, use_hindi
+
+
+def generate_chart(house_data: dict, lagna_sign: str, use_hindi: bool = True) -> str:
+    """
+    Generate a North Indian Kundli chart image.
+
+    Parameters
+    ----------
+    house_data : dict
+        Keys are house numbers 1-12 (int).
+        Values are lists of planet name strings, e.g. ["Sun", "Mars"].
+        House 1 is the Lagna house (top-center diamond).
+    lagna_sign : str
+        Name of the sign in the Lagna (e.g. "Aries").
+    use_hindi : bool
+        If True, use Hindi abbreviations; otherwise English.
+
+    Returns
+    -------
+    str  – path to the saved PNG file.
+    """
+
+    # ── Canvas setup ─────────────────────────────────────────────────────────
+    SIZE = 900
+    PAD  = 50
+    G    = (SIZE - 2 * PAD) // 4   # cell size ≈ 200
+    O    = PAD                      # grid origin
+
+    img  = Image.new('RGB', (SIZE, SIZE), BG_COLOR)
     draw = ImageDraw.Draw(img)
 
-    try:
-        fB = ImageFont.truetype("DejaVuSans-Bold.ttf", 19)
-        fN = ImageFont.truetype("DejaVuSans.ttf", 13)
-        fT = ImageFont.truetype("DejaVuSans-Bold.ttf", 26)
-    except Exception:
-        fB = fN = fT = ImageFont.load_default()
+    fBold, fNormal, fNum, detected_hindi = _load_fonts(22, 14, 14)
+    SHORT_MAP = SHORT if (use_hindi and detected_hindi) else SHORT_EN
 
-    DARK   = '#2C1810'
-    ACCENT = '#8B1A1A'
-    BG     = '#FFFDF5'   # matches image background
-    LGBG   = '#FFF0E0'   # warm tint for Lagna house
+    # ── Helper: draw text centred at (cx, cy) ────────────────────────────────
+    def draw_centered(text, cx, cy, font, color):
+        bb = draw.textbbox((0, 0), text, font=font)
+        w  = bb[2] - bb[0]
+        h  = bb[3] - bb[1]
+        draw.text((cx - w / 2, cy - h / 2), text, fill=color, font=font)
 
-    # ── 1. Outer border ───────────────────────────────────────────
-    draw.rectangle([O, O, O+4*G, O+4*G], outline=DARK, width=3)
+    # ── Grid corners / key points ─────────────────────────────────────────────
+    # Outer square corners
+    TL_out = (O,       O)
+    TR_out = (O+4*G,   O)
+    BR_out = (O+4*G,   O+4*G)
+    BL_out = (O,       O+4*G)
 
-    # ── 2. Internal 4×4 grid lines ────────────────────────────────
+    # Inner square corners (centre 2×2 block)
+    TL = (O+G,   O+G)
+    TR = (O+3*G, O+G)
+    BR = (O+3*G, O+3*G)
+    BL = (O+G,   O+3*G)
+    C  = (O+2*G, O+2*G)   # dead center
+
+    # ── 1. White fill ─────────────────────────────────────────────────────────
+    draw.rectangle([O, O, O+4*G, O+4*G], fill=BG_COLOR)
+
+    # ── 2. Outer border ───────────────────────────────────────────────────────
+    draw.rectangle([O, O, O+4*G, O+4*G], outline=LINE_COLOR, width=3)
+
+    # ── 3. Internal 4×4 grid lines ────────────────────────────────────────────
     for i in range(1, 4):
-        draw.line([O+i*G, O,     O+i*G, O+4*G], fill=DARK, width=2)
-        draw.line([O,     O+i*G, O+4*G, O+i*G], fill=DARK, width=2)
+        draw.line([(O+i*G, O),     (O+i*G, O+4*G)], fill=LINE_COLOR, width=2)
+        draw.line([(O,     O+i*G), (O+4*G, O+i*G)], fill=LINE_COLOR, width=2)
 
-    # ── 3. Diagonal lines in center 2×2 block ─────────────────────
-    draw.line([O+G, O+G,   O+3*G, O+3*G], fill=DARK, width=2)   # \
-    draw.line([O+3*G, O+G, O+G,   O+3*G], fill=DARK, width=2)   # /
+    # ── 4. Diagonals in centre 2×2 block ──────────────────────────────────────
+    draw.line([TL, BR], fill=LINE_COLOR, width=2)   # \
+    draw.line([TR, BL], fill=LINE_COLOR, width=2)   # /
 
-    # ── 4. Fill all 4 center triangles ────────────────────────────
-    # This erases the crossing lines INSIDE each triangle so planets
-    # appear on a clean background (no lines running through text).
-    tip = (O+2*G, O+2*G)       # center point (450, 450)
-    TL  = (O+G,   O+G)         # (255, 255)
-    TR  = (O+3*G, O+G)         # (645, 255)
-    BR  = (O+3*G, O+3*G)       # (645, 645)
-    BL  = (O+G,   O+3*G)       # (255, 645)
+    # ── 5. House number & planet anchor points ────────────────────────────────
+    #
+    # North Indian layout (fixed houses, Lagna = house 1 = top diamond):
+    #
+    #   [12]  [1/Lag] [2]
+    #   [11]  [10][4] [3]
+    #   [10]  [7]     [4]  ← triangles; corners are rect cells
+    #   [9]   [8]     [5]
+    #   [8]   [7/bot] [6]
+    #
+    # Actual cell mapping for a 4×4 grid (0-indexed col, row):
+    #   Corner cells  → plain rectangles
+    #   Edge-centre cells → plain rectangles (but only 3 per side, skip corner cols)
+    #   Centre 4 triangles → diamonds
+    #
+    # House positions in the North Indian chart (standard):
+    # Top row    : H12(col0,row0)  H1-top-tri  H2(col3,row0)
+    # 2nd row    : H11(col0,row1)  H10-left-tri / H4-right-tri  H3(col3,row1)
+    # 3rd row    : H9(col0,row2)   H7-bot-tri                   H5(col3,row2)
+    # Bot row    : H8(col0,row3)   H8-bot?     H6(col3,row3)
+    #
+    # Simpler: each house has a "label point" and a "planet list start point".
+    #
+    # We store (center_x, center_y) for the block, and nudge number to top-left
+    # corner of that block.
 
-    # H1=top (Lagna, warm fill), H4=right, H7=bottom, H10=left (all BG)
-    draw.polygon([TL, TR,  tip], fill=LGBG)   # H1  top
-    draw.polygon([TR, BR,  tip], fill=BG)     # H4  right
-    draw.polygon([BL, BR,  tip], fill=BG)     # H7  bottom
-    draw.polygon([TL, BL,  tip], fill=BG)     # H10 left
+    # Half-cell convenience
+    h = G / 2   # half cell = 100
 
-    # ── 5. Redraw all center-block edges (fills covered them) ──────
-    draw.line([TL,  TR ], fill=DARK, width=2)   # top edge
-    draw.line([TR,  BR ], fill=DARK, width=2)   # right edge
-    draw.line([BR,  BL ], fill=DARK, width=2)   # bottom edge
-    draw.line([BL,  TL ], fill=DARK, width=2)   # left edge
-    draw.line([TL,  tip], fill=DARK, width=2)   # \ top-left spoke
-    draw.line([TR,  tip], fill=DARK, width=2)   # / top-right spoke
-    draw.line([BR,  tip], fill=DARK, width=2)   # \ bottom-right spoke
-    draw.line([BL,  tip], fill=DARK, width=2)   # / bottom-left spoke
+    # Centers of the 12 houses (number label positions)
+    # For rectangular outer cells: center of that cell
+    # For triangular inner houses: geometric centroid of the triangle
+    #   Top triangle    centroid y = O+G + (O+2*G - (O+G))/3 = O+G + G/3
+    #   Right triangle  centroid x = O+3*G + G/3
+    #   Bottom triangle centroid y = O+3*G - G/3   (counted from BL corner downward... let's compute properly)
 
-    # ── 6. House text anchor positions ────────────────────────────
-    # Outer rectangular cells: column/row centres.
-    # Center triangles: pushed into the "fat" upper part of each triangle,
-    # above the horizontal midline at y=450, to stay away from the center crossing.
+    # Triangle centroids (average of 3 vertices):
+    # H1  top:    TL=(O+G,O+G)  TR=(O+3*G,O+G)  C=(O+2*G,O+2*G)
+    #   cx = (O+G + O+3G + O+2G)/3 = O+2G,  cy = (O+G + O+G + O+2G)/3 = O+4G/3
+    h1_cx = O + 2*G
+    h1_cy = O + G + G//3   # a bit above center
+
+    # H4  right:  TR=(O+3*G,O+G)  BR=(O+3*G,O+3*G)  C=(O+2*G,O+2*G)
+    h4_cx = O + 3*G - G//3
+    h4_cy = O + 2*G
+
+    # H7  bottom: BL=(O+G,O+3*G)  BR=(O+3*G,O+3*G)  C=(O+2*G,O+2*G)
+    h7_cx = O + 2*G
+    h7_cy = O + 3*G - G//3
+
+    # H10 left:   TL=(O+G,O+G)  BL=(O+G,O+3*G)  C=(O+2*G,O+2*G)
+    h10_cx = O + G + G//3
+    h10_cy = O + 2*G
+
     house_centers = {
-        12: (157.5, 157.5),    # top-left corner cell
-        1:  (450.0, 318.0),    # H1  top-triangle       (Lagna)
-        2:  (742.5, 157.5),    # top-right corner cell
-        3:  (742.5, 352.5),    # right col, upper cell
-        4:  (600.0, 390.0),    # H4  right-triangle     (upper half)
-        5:  (742.5, 547.5),    # right col, lower cell
-        6:  (742.5, 742.5),    # bottom-right corner cell
-        7:  (450.0, 610.0),    # H7  bottom-triangle    (lower half)
-        8:  (157.5, 742.5),    # bottom-left corner cell
-        9:  (157.5, 547.5),    # left col, lower cell
-        10: (300.0, 390.0),    # H10 left-triangle      (upper half)
-        11: (157.5, 352.5),    # left col, upper cell
+        12: (O +   h,       O +   h),       # top-left  corner
+        1:  (h1_cx,         h1_cy),          # top  triangle  (Lagna)
+        2:  (O + 3*G + h,   O +   h),        # top-right corner
+        3:  (O + 3*G + h,   O + G + h),      # right-upper rect
+        4:  (h4_cx,         h4_cy),          # right triangle
+        5:  (O + 3*G + h,   O + 2*G + h),    # right-lower rect
+        6:  (O + 3*G + h,   O + 3*G + h),    # bottom-right corner
+        7:  (h7_cx,         h7_cy),          # bottom triangle
+        8:  (O +   h,       O + 3*G + h),    # bottom-left corner
+        9:  (O +   h,       O + 2*G + h),    # left-lower rect
+        10: (h10_cx,        h10_cy),         # left triangle
+        11: (O +   h,       O + G + h),      # left-upper rect
     }
 
-    LINE_H = 24   # px between planet lines
-    NUM_H  = 16   # px for house number row
+    LINE_H = 26   # vertical spacing between planet lines
+    NUM_H  = 18   # space reserved for the house number row
 
-    # ── 7. Draw house numbers + planet abbreviations ───────────────
-    for h, (hx, hy) in house_centers.items():
-        planets = house_data.get(h, [])
-        n       = len(planets)
+    # ── 6. Draw each house ────────────────────────────────────────────────────
+    for house_num, (hx, hy) in house_centers.items():
+        planets = house_data.get(house_num, [])
+        n = len(planets)
 
-        # Vertically centre the whole block (number + planets) around (hx, hy)
-        total_h = NUM_H + n * LINE_H
+        # Lagna marker: add "ल." as a pseudo-planet in house 1 if not already there
+        extra = []
+        if house_num == 1:
+            lagna_abbr = SHORT_MAP.get("Lagna", "As")
+            extra = [lagna_abbr]
+
+        all_items = extra + [SHORT_MAP.get(p, p[:2]) for p in planets]
+        total_h = NUM_H + len(all_items) * LINE_H
         start_y = hy - total_h / 2
 
-        # House number
-        num_txt = str(h)
-        nb  = draw.textbbox((0, 0), num_txt, font=fN)
-        nw  = nb[2] - nb[0]
-        col = ACCENT if h == 1 else '#AAAAAA'
-        draw.text((hx - nw / 2, start_y), num_txt, fill=col, font=fN)
+        # House number (small, purple, top of block)
+        num_txt = str(house_num)
+        bb  = draw.textbbox((0, 0), num_txt, font=fNum)
+        nw  = bb[2] - bb[0]
+        draw.text((hx - nw / 2, start_y), num_txt, fill=NUM_COLOR, font=fNum)
 
         # Planet abbreviations
-        for i, pname in enumerate(planets):
-            short = SHORT.get(pname, pname[:2].title())
-            color = PLANET_COLORS.get(pname, '#1A1A2E')
-            pb  = draw.textbbox((0, 0), short, font=fB)
-            pw  = pb[2] - pb[0]
-            px  = hx - pw / 2
-            py  = start_y + NUM_H + i * LINE_H
-            draw.text((px + 1, py + 1), short, fill='#D0C8B0', font=fB)   # shadow
-            draw.text((px,     py    ), short, fill=color,      font=fB)
+        for i, abbr in enumerate(all_items):
+            py = start_y + NUM_H + i * LINE_H
+            draw_centered(abbr, hx, py + LINE_H // 2, fBold, PLANET_COLOR)
 
-    # ── 8. Title ──────────────────────────────────────────────────
+    # ── 7. Title bar at top ───────────────────────────────────────────────────
     title = f"Lagna: {lagna_sign}"
-    tb = draw.textbbox((0, 0), title, font=fT)
-    draw.text(((SIZE - (tb[2] - tb[0])) // 2, 16), title, fill=DARK, font=fT)
+    bb = draw.textbbox((0, 0), title, font=fBold)
+    tw = bb[2] - bb[0]
+    draw.text(((SIZE - tw) // 2, 14), title, fill='#2C1810', font=fBold)
 
-    # ── 9. Redraw outer border + corner accents ────────────────────
-    draw.rectangle([O, O, O+4*G, O+4*G], outline=DARK, width=3)
-    cs = 16
-    for (ex, ey) in [(O, O), (O+4*G-cs, O), (O, O+4*G-cs), (O+4*G-cs, O+4*G-cs)]:
-        draw.rectangle([ex, ey, ex+cs, ey+cs], fill=ACCENT)
+    # ── 8. Redraw borders (planets may have painted over edges) ───────────────
+    draw.rectangle([O, O, O+4*G, O+4*G], outline=LINE_COLOR, width=3)
+    for i in range(1, 4):
+        draw.line([(O+i*G, O),     (O+i*G, O+4*G)], fill=LINE_COLOR, width=2)
+        draw.line([(O,     O+i*G), (O+4*G, O+i*G)], fill=LINE_COLOR, width=2)
+    draw.line([TL, BR], fill=LINE_COLOR, width=2)
+    draw.line([TR, BL], fill=LINE_COLOR, width=2)
 
-    filename = f"chart_{int(time.time())}.png"
+    # ── 9. Save ───────────────────────────────────────────────────────────────
+    filename = f"chart_{uuid.uuid4().hex}.png"
     img.save(filename, dpi=(150, 150))
     return filename
-
-
 # -------------------------
 # KUNDLI API
 # -------------------------
@@ -296,8 +607,48 @@ def get_chart(filename):
         return "Chart expired", 404
 
 # -------------------------
+# TEST MOON ROUTE
+# -------------------------
+@app.route("/test-moon")
+def test_moon():
+
+    dt = datetime(1999, 8, 11, 10, 30)
+
+    moon = get_moon_longitude(dt)
+
+    return {
+        "moon_longitude": moon
+    }
+
+@app.route('/test-dasha')
+def test_dasha():
+
+    birth = datetime(
+        1999,
+        8,
+        11,
+        10,
+        30
+    )
+
+    moon_longitude = get_moon_longitude(birth)
+
+    nakshatra = get_nakshatra(
+        moon_longitude
+    )
+
+    dasha_lord = get_dasha_lord(
+        nakshatra
+    )
+
+    return {
+        "moon_longitude": round(moon_longitude, 4),
+        "nakshatra": nakshatra,
+        "dasha_lord": dasha_lord
+    }
+# -------------------------
 # RUN
 # -------------------------
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)

@@ -1,0 +1,25 @@
+# dasha/constants.py
+
+VIMSHOTTARI_SEQUENCE = [
+    "Ketu",
+    "Shukra",
+    "Surya",
+    "Chandra",
+    "Mangal",
+    "Rahu",
+    "Guru",
+    "Shani",
+    "Budh"
+]
+
+DASHA_YEARS = {
+    "Ketu": 7,
+    "Shukra": 20,
+    "Surya": 6,
+    "Chandra": 10,
+    "Mangal": 7,
+    "Rahu": 18,
+    "Guru": 16,
+    "Shani": 19,
+    "Budh": 17,
+}
