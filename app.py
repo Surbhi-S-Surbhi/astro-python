@@ -253,7 +253,7 @@ SHORT_EN = {
     "Ketu":    "Ke",
     "Lagna":   "As",
 }
-
+BG_COLOR = "#FFFDF5"
 PLANET_COLORS = {
     "sun":     "#E65C00",
     "moon":    "#4A90D9",
