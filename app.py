@@ -255,6 +255,7 @@ SHORT_EN = {
 }
 print("NEW VERSION RUNNING")
 BG_COLOR = "#FFFDF5"
+LINE_COLOR = "#2C1810"
 PLANET_COLORS = {
     "sun":     "#E65C00",
     "moon":    "#4A90D9",
