@@ -253,6 +253,7 @@ SHORT_EN = {
     "Ketu":    "Ke",
     "Lagna":   "As",
 }
+print("NEW VERSION RUNNING")
 BG_COLOR = "#FFFDF5"
 PLANET_COLORS = {
     "sun":     "#E65C00",
