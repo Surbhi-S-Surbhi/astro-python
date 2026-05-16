@@ -498,7 +498,7 @@ def generate_chart(house_data: dict, lagna_sign: str, use_hindi: bool = True) ->
         # Planet abbreviations
         for i, abbr in enumerate(all_items):
             py = start_y + NUM_H + i * LINE_H
-            draw_centered(abbr, hx, py + LINE_H // 2, fBold, PLANET_COLOR)
+            draw_centered(abbr, hx, py + LINE_H // 2, fBold,  "#6A0DAD")
 
     # ── 7. Title bar at top ───────────────────────────────────────────────────
     title = f"Lagna: {lagna_sign}"
