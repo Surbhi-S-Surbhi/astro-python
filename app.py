@@ -24,6 +24,21 @@ from astrology.dasha.engine import (
     generate_antardashas,
     get_current_antardasha
 )
+from generate_chart import generate_chart
+
+path = generate_chart(
+    house_data={
+        1:  ["Jupiter"],
+        4:  ["Moon", "Mars"],
+        6:  ["Sun", "Venus", "Ketu"],
+        7:  ["Mercury"],
+        9:  ["Moon", "Mars"],
+        12: ["Saturn", "Rahu"],
+    },
+    lagna_sign="Cancer"
+)
+# path = "chart_abc123.png"  ← the saved image file
+
 app = Flask(__name__)
 # set ephemeris path
 swe.set_ephe_path('./ephe')
@@ -328,6 +343,7 @@ BG     = "#fffdf8"
 DEVA_BOLD = "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf"
 LAT_BOLD  = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
+
 def _try_font(path, size):
     try:
         return ImageFont.truetype(path, size)
@@ -451,7 +467,8 @@ p2 = generate_chart({
     11:["Saturn","Rahu"], 12:["Mars","Moon"]
 }, "Aries")
 print(f"Stress: {p2}")
- 
+
+
 # -------------------------
 # KUNDLI API
 # -------------------------
