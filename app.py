@@ -334,189 +334,114 @@ def _load_fonts(size_bold, size_normal, size_num):
     return fBold, fNormal, fNum, use_hindi
 
 
-def generate_chart(house_data: dict, lagna_sign: str, use_hindi: bool = True) -> str:
-    """
-    Generate a North Indian Kundli chart image.
+def generate_chart(house_data, lagna_sign):
 
-    Parameters
-    ----------
-    house_data : dict
-        Keys are house numbers 1-12 (int).
-        Values are lists of planet name strings, e.g. ["Sun", "Mars"].
-        House 1 is the Lagna house (top-center diamond).
-    lagna_sign : str
-        Name of the sign in the Lagna (e.g. "Aries").
-    use_hindi : bool
-        If True, use Hindi abbreviations; otherwise English.
+    from PIL import Image, ImageDraw, ImageFont
+    import uuid
 
-    Returns
-    -------
-    str  – path to the saved PNG file.
-    """
-
-    # ── Canvas setup ─────────────────────────────────────────────────────────
     SIZE = 900
-    PAD  = 50
-    G    = (SIZE - 2 * PAD) // 4   # cell size ≈ 200
-    O    = PAD                      # grid origin
+    MARGIN = 60
 
-    img  = Image.new('RGB', (SIZE, SIZE), BG_COLOR)
+    img = Image.new("RGB", (SIZE, SIZE), "#fffdf8")
     draw = ImageDraw.Draw(img)
 
-    fBold, fNormal, fNum, detected_hindi = _load_fonts(22, 14, 14)
-    SHORT_MAP = SHORT if (use_hindi and detected_hindi) else SHORT_EN
+    # Fonts
+    try:
+        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
+        planet_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
+        number_font = ImageFont.truetype("DejaVuSans.ttf", 20)
+    except:
+        title_font = ImageFont.load_default()
+        planet_font = ImageFont.load_default()
+        number_font = ImageFont.load_default()
 
-    # ── Helper: draw text centred at (cx, cy) ────────────────────────────────
-    def draw_centered(text, cx, cy, font, color):
-        bb = draw.textbbox((0, 0), text, font=font)
-        w  = bb[2] - bb[0]
-        h  = bb[3] - bb[1]
-        draw.text((cx - w / 2, cy - h / 2), text, fill=color, font=font)
+    PURPLE = "#6A0DAD"
+    BLACK = "#111111"
 
-    # ── Grid corners / key points ─────────────────────────────────────────────
-    # Outer square corners
-    TL_out = (O,       O)
-    TR_out = (O+4*G,   O)
-    BR_out = (O+4*G,   O+4*G)
-    BL_out = (O,       O+4*G)
+    left = MARGIN
+    top = MARGIN + 40
+    right = SIZE - MARGIN
+    bottom = SIZE - MARGIN
 
-    # Inner square corners (centre 2×2 block)
-    TL = (O+G,   O+G)
-    TR = (O+3*G, O+G)
-    BR = (O+3*G, O+3*G)
-    BL = (O+G,   O+3*G)
-    C  = (O+2*G, O+2*G)   # dead center
+    center_x = SIZE // 2
+    center_y = (top + bottom) // 2
 
-    # ── 1. White fill ─────────────────────────────────────────────────────────
-    draw.rectangle([O, O, O+4*G, O+4*G], fill=BG_COLOR)
+    # Outer square
+    draw.rectangle(
+        [left, top, right, bottom],
+        outline=BLACK,
+        width=3
+    )
 
-    # ── 2. Outer border ───────────────────────────────────────────────────────
-    draw.rectangle([O, O, O+4*G, O+4*G], outline=LINE_COLOR, width=3)
+    # Main diagonals
+    draw.line((left, top, right, bottom), fill=BLACK, width=3)
+    draw.line((right, top, left, bottom), fill=BLACK, width=3)
 
-    # ── 3. Internal 4×4 grid lines ────────────────────────────────────────────
-    for i in range(1, 4):
-        draw.line([(O+i*G, O),     (O+i*G, O+4*G)], fill=LINE_COLOR, width=2)
-        draw.line([(O,     O+i*G), (O+4*G, O+i*G)], fill=LINE_COLOR, width=2)
+    # Middle diamond
+    draw.line((center_x, top, right, center_y), fill=BLACK, width=3)
+    draw.line((right, center_y, center_x, bottom), fill=BLACK, width=3)
+    draw.line((center_x, bottom, left, center_y), fill=BLACK, width=3)
+    draw.line((left, center_y, center_x, top), fill=BLACK, width=3)
 
-    # ── 4. Diagonals in centre 2×2 block ──────────────────────────────────────
-    draw.line([TL, BR], fill=LINE_COLOR, width=2)   # \
-    draw.line([TR, BL], fill=LINE_COLOR, width=2)   # /
-
-    # ── 5. House number & planet anchor points ────────────────────────────────
-    #
-    # North Indian layout (fixed houses, Lagna = house 1 = top diamond):
-    #
-    #   [12]  [1/Lag] [2]
-    #   [11]  [10][4] [3]
-    #   [10]  [7]     [4]  ← triangles; corners are rect cells
-    #   [9]   [8]     [5]
-    #   [8]   [7/bot] [6]
-    #
-    # Actual cell mapping for a 4×4 grid (0-indexed col, row):
-    #   Corner cells  → plain rectangles
-    #   Edge-centre cells → plain rectangles (but only 3 per side, skip corner cols)
-    #   Centre 4 triangles → diamonds
-    #
-    # House positions in the North Indian chart (standard):
-    # Top row    : H12(col0,row0)  H1-top-tri  H2(col3,row0)
-    # 2nd row    : H11(col0,row1)  H10-left-tri / H4-right-tri  H3(col3,row1)
-    # 3rd row    : H9(col0,row2)   H7-bot-tri                   H5(col3,row2)
-    # Bot row    : H8(col0,row3)   H8-bot?     H6(col3,row3)
-    #
-    # Simpler: each house has a "label point" and a "planet list start point".
-    #
-    # We store (center_x, center_y) for the block, and nudge number to top-left
-    # corner of that block.
-
-    # Half-cell convenience
-    h = G / 2   # half cell = 100
-
-    # Centers of the 12 houses (number label positions)
-    # For rectangular outer cells: center of that cell
-    # For triangular inner houses: geometric centroid of the triangle
-    #   Top triangle    centroid y = O+G + (O+2*G - (O+G))/3 = O+G + G/3
-    #   Right triangle  centroid x = O+3*G + G/3
-    #   Bottom triangle centroid y = O+3*G - G/3   (counted from BL corner downward... let's compute properly)
-
-    # Triangle centroids (average of 3 vertices):
-    # H1  top:    TL=(O+G,O+G)  TR=(O+3*G,O+G)  C=(O+2*G,O+2*G)
-    #   cx = (O+G + O+3G + O+2G)/3 = O+2G,  cy = (O+G + O+G + O+2G)/3 = O+4G/3
-    h1_cx = O + 2*G
-    h1_cy = O + G + G//3   # a bit above center
-
-    # H4  right:  TR=(O+3*G,O+G)  BR=(O+3*G,O+3*G)  C=(O+2*G,O+2*G)
-    h4_cx = O + 3*G - G//3
-    h4_cy = O + 2*G
-
-    # H7  bottom: BL=(O+G,O+3*G)  BR=(O+3*G,O+3*G)  C=(O+2*G,O+2*G)
-    h7_cx = O + 2*G
-    h7_cy = O + 3*G - G//3
-
-    # H10 left:   TL=(O+G,O+G)  BL=(O+G,O+3*G)  C=(O+2*G,O+2*G)
-    h10_cx = O + G + G//3
-    h10_cy = O + 2*G
-
-    house_centers = {
-        12: (O +   h,       O +   h),       # top-left  corner
-        1:  (h1_cx,         h1_cy),          # top  triangle  (Lagna)
-        2:  (O + 3*G + h,   O +   h),        # top-right corner
-        3:  (O + 3*G + h,   O + G + h),      # right-upper rect
-        4:  (h4_cx,         h4_cy),          # right triangle
-        5:  (O + 3*G + h,   O + 2*G + h),    # right-lower rect
-        6:  (O + 3*G + h,   O + 3*G + h),    # bottom-right corner
-        7:  (h7_cx,         h7_cy),          # bottom triangle
-        8:  (O +   h,       O + 3*G + h),    # bottom-left corner
-        9:  (O +   h,       O + 2*G + h),    # left-lower rect
-        10: (h10_cx,        h10_cy),         # left triangle
-        11: (O +   h,       O + G + h),      # left-upper rect
+    # House positions
+    house_positions = {
+        1:  (center_x, top + 120),
+        2:  (right - 140, top + 120),
+        3:  (right - 80, center_y - 90),
+        4:  (right - 150, center_y + 30),
+        5:  (right - 80, bottom - 180),
+        6:  (right - 140, bottom - 80),
+        7:  (center_x, bottom - 120),
+        8:  (left + 140, bottom - 80),
+        9:  (left + 80, bottom - 180),
+        10: (left + 150, center_y + 30),
+        11: (left + 80, center_y - 90),
+        12: (left + 140, top + 120),
     }
 
-    LINE_H = 26   # vertical spacing between planet lines
-    NUM_H  = 18   # space reserved for the house number row
+    # Draw house numbers + planets
+    for house_num, (x, y) in house_positions.items():
 
-    # ── 6. Draw each house ────────────────────────────────────────────────────
-    for house_num, (hx, hy) in house_centers.items():
+        draw.text(
+            (x, y),
+            str(house_num),
+            fill=PURPLE,
+            font=number_font,
+            anchor="mm"
+        )
+
         planets = house_data.get(house_num, [])
-        n = len(planets)
 
-        # Lagna marker: add "ल." as a pseudo-planet in house 1 if not already there
-        extra = []
-        if house_num == 1:
-            lagna_abbr = SHORT_MAP.get("Lagna", "As")
-            extra = [lagna_abbr]
+        py = y + 40
 
-        all_items = extra + [SHORT_MAP.get(p, p[:2]) for p in planets]
-        total_h = NUM_H + len(all_items) * LINE_H
-        start_y = hy - total_h / 2
+        for p in planets:
 
-        # House number (small, purple, top of block)
-        num_txt = str(house_num)
-        bb  = draw.textbbox((0, 0), num_txt, font=fNum)
-        nw  = bb[2] - bb[0]
-        draw.text((hx - nw / 2, start_y), num_txt, fill=NUM_COLOR, font=fNum)
+            short = SHORT_EN.get(p.lower(), p[:2])
 
-        # Planet abbreviations
-        for i, abbr in enumerate(all_items):
-            py = start_y + NUM_H + i * LINE_H
-            draw_centered(abbr, hx, py + LINE_H // 2, fBold,  "#6A0DAD")
+            draw.text(
+                (x, py),
+                short.lower(),
+                fill=PURPLE,
+                font=planet_font,
+                anchor="mm"
+            )
 
-    # ── 7. Title bar at top ───────────────────────────────────────────────────
-    title = f"Lagna: {lagna_sign}"
-    bb = draw.textbbox((0, 0), title, font=fBold)
-    tw = bb[2] - bb[0]
-    draw.text(((SIZE - tw) // 2, 14), title, fill='#2C1810', font=fBold)
+            py += 28
 
-    # ── 8. Redraw borders (planets may have painted over edges) ───────────────
-    draw.rectangle([O, O, O+4*G, O+4*G], outline=LINE_COLOR, width=3)
-    for i in range(1, 4):
-        draw.line([(O+i*G, O),     (O+i*G, O+4*G)], fill=LINE_COLOR, width=2)
-        draw.line([(O,     O+i*G), (O+4*G, O+i*G)], fill=LINE_COLOR, width=2)
-    draw.line([TL, BR], fill=LINE_COLOR, width=2)
-    draw.line([TR, BL], fill=LINE_COLOR, width=2)
+    # Lagna title
+    draw.text(
+        (SIZE // 2, 35),
+        f"Lagna: {lagna_sign}",
+        fill=BLACK,
+        font=title_font,
+        anchor="mm"
+    )
 
-    # ── 9. Save ───────────────────────────────────────────────────────────────
+    # Save image
     filename = f"chart_{uuid.uuid4().hex}.png"
-    img.save(filename, dpi=(150, 150))
+
+    img.save(filename)
+
     return filename
 # -------------------------
 # KUNDLI API
