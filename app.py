@@ -229,29 +229,15 @@ def get_house_mapping(lagna_sign):
     return houses
 
 
-SHORT = {
-    "Sun":     "सू",
-    "Moon":    "चं",
-    "Mars":    "मं",
-    "Mercury": "बु",
-    "Jupiter": "गु",
-    "Venus":   "शु",
-    "Saturn":  "श",
-    "Rahu":    "रा",
-    "Ketu":    "के",
-    "Lagna":   "ल.",
+SHORT_HI = {
+    "sun": "सू", "moon": "चं", "mars": "मं", "mercury": "बु",
+    "jupiter": "गु", "venus": "शु", "saturn": "श", "rahu": "रा",
+    "ketu": "के", "lagna": "ल.", "ascendant": "ल.",
 }
 SHORT_EN = {
-    "Sun":     "Su",
-    "Moon":    "Mo",
-    "Mars":    "Ma",
-    "Mercury": "Me",
-    "Jupiter": "Ju",
-    "Venus":   "Ve",
-    "Saturn":  "Sa",
-    "Rahu":    "Ra",
-    "Ketu":    "Ke",
-    "Lagna":   "As",
+    "sun": "Su", "moon": "Mo", "mars": "Ma", "mercury": "Me",
+    "jupiter": "Ju", "venus": "Ve", "saturn": "Sa", "rahu": "Ra",
+    "ketu": "Ke", "lagna": "As", "ascendant": "As",
 }
 print("NEW VERSION RUNNING")
 BG_COLOR = "#FFFDF5"
@@ -334,115 +320,138 @@ def _load_fonts(size_bold, size_normal, size_num):
     return fBold, fNormal, fNum, use_hindi
 
 
-def generate_chart(house_data, lagna_sign):
 
-    from PIL import Image, ImageDraw, ImageFont
-    import uuid
+PURPLE = "#6A0DAD"
+BLACK  = "#111111"
+BG     = "#fffdf8"
 
-    SIZE = 900
-    MARGIN = 60
+DEVA_BOLD = "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf"
+LAT_BOLD  = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
-    img = Image.new("RGB", (SIZE, SIZE), "#fffdf8")
+def _try_font(path, size):
+    try:
+        return ImageFont.truetype(path, size)
+    except:
+        return None
+
+def generate_chart(house_data: dict, lagna_sign: str) -> str:
+    SIZE    = 1000
+    TITLE_H = 55
+    PAD     = 70
+
+    img  = Image.new("RGB", (SIZE, SIZE), BG)
     draw = ImageDraw.Draw(img)
 
-    # Fonts
-    try:
-        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
-        planet_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
-        number_font = ImageFont.truetype("DejaVuSans.ttf", 20)
-    except:
-        title_font = ImageFont.load_default()
-        planet_font = ImageFont.load_default()
-        number_font = ImageFont.load_default()
+    fTitle  = _try_font(LAT_BOLD, 30) or ImageFont.load_default()
+    fNum    = _try_font(LAT_BOLD, 22) or ImageFont.load_default()
+    fPlanet = _try_font(DEVA_BOLD, 26) or _try_font(LAT_BOLD, 26) or ImageFont.load_default()
+    has_deva = _try_font(DEVA_BOLD, 10) is not None
+    SHORT    = SHORT_HI if has_deva else SHORT_EN
 
-    PURPLE = "#6A0DAD"
-    BLACK = "#111111"
+    L=PAD; T=PAD+TITLE_H; R=SIZE-PAD; B=SIZE-PAD
+    cx=(L+R)//2; cy=(T+B)//2; sq=R-L; q=sq//4
 
-    left = MARGIN
-    top = MARGIN + 40
-    right = SIZE - MARGIN
-    bottom = SIZE - MARGIN
+    tl=(L,T); tr=(R,T); br=(R,B); bl=(L,B)
+    top=(cx,T); right=(R,cy); bottom=(cx,B); left=(L,cy)
+    P_TL=(cx-q,T+q); P_TR=(cx+q,T+q)
+    P_BR=(cx+q,cy+q); P_BL=(cx-q,cy+q)
+    LW=3
 
-    center_x = SIZE // 2
-    center_y = (top + bottom) // 2
+    # Draw lines
+    draw.rectangle([L,T,R,B], outline=BLACK, width=4)
+    draw.line([tl,br], fill=BLACK, width=LW)
+    draw.line([tr,bl], fill=BLACK, width=LW)
+    draw.line([top,right],    fill=BLACK, width=LW)
+    draw.line([right,bottom], fill=BLACK, width=LW)
+    draw.line([bottom,left],  fill=BLACK, width=LW)
+    draw.line([left,top],     fill=BLACK, width=LW)
 
-    # Outer square
-    draw.rectangle(
-        [left, top, right, bottom],
-        outline=BLACK,
-        width=3
-    )
+    # weighted point: w% from tip toward base midpoint
+    def wp(b1, b2, tip, w=0.58):
+        bx=(b1[0]+b2[0])//2; by=(b1[1]+b2[1])//2
+        return (int(tip[0]+w*(bx-tip[0])), int(tip[1]+w*(by-tip[1])))
 
-    # Main diagonals
-    draw.line((left, top, right, bottom), fill=BLACK, width=3)
-    draw.line((right, top, left, bottom), fill=BLACK, width=3)
-
-    # Middle diamond
-    draw.line((center_x, top, right, center_y), fill=BLACK, width=3)
-    draw.line((right, center_y, center_x, bottom), fill=BLACK, width=3)
-    draw.line((center_x, bottom, left, center_y), fill=BLACK, width=3)
-    draw.line((left, center_y, center_x, top), fill=BLACK, width=3)
-
-    # House positions
-    house_positions = {
-        1:  (center_x, top + 120),
-        2:  (right - 140, top + 120),
-        3:  (right - 80, center_y - 90),
-        4:  (right - 150, center_y + 30),
-        5:  (right - 80, bottom - 180),
-        6:  (right - 140, bottom - 80),
-        7:  (center_x, bottom - 120),
-        8:  (left + 140, bottom - 80),
-        9:  (left + 80, bottom - 180),
-        10: (left + 150, center_y + 30),
-        11: (left + 80, center_y - 90),
-        12: (left + 140, top + 120),
+    # For bottom-corner houses (H6, H8) and right-corner (H5) and left-corner (H9),
+    # bias MORE toward the inner chord to stay away from the outer boundary
+    centers = {
+        1:  wp(P_TL, P_TR,  top,    0.62),
+        2:  wp(P_TR, top,   tr,     0.54),
+        3:  wp(P_TR, right, tr,     0.54),
+        4:  wp(P_TR, P_BR,  right,  0.62),
+        5:  wp(P_BR, right, br,     0.50),
+        6:  wp(P_BR, bottom,br,     0.50),
+        7:  wp(P_BL, P_BR,  bottom, 0.62),
+        8:  wp(P_BL, bottom,bl,     0.50),
+        9:  wp(P_BL, left,  bl,     0.50),
+        10: wp(P_TL, P_BL,  left,   0.62),
+        11: wp(P_TL, left,  tl,     0.54),
+        12: wp(P_TL, top,   tl,     0.54),
     }
 
-    # Draw house numbers + planets
-    for house_num, (x, y) in house_positions.items():
+    LINE_H = 32
 
-        draw.text(
-            (x, y),
-            str(house_num),
-            fill=PURPLE,
-            font=number_font,
-            anchor="mm"
-        )
+    def draw_house(h, hx, hy):
+        planets = list(house_data.get(h, []))
+        extra   = [SHORT.get("lagna","As")] if h==1 else []
+        abbrs   = extra + [SHORT.get(p.lower(), p[:2]) for p in planets]
 
-        planets = house_data.get(house_num, [])
+        total_h = LINE_H * (1 + len(abbrs))
+        # For bottom-corner houses, shift anchor UP by half the planet block height
+        # so planets don't overflow below the border
+        y_offset = 0
+        if h in (6, 8):    # bottom-corner houses
+            y_offset = -LINE_H * len(abbrs) // 2
+        elif h in (5, 9):  # side-bottom houses, mild shift
+            y_offset = -LINE_H * len(abbrs) // 3
 
-        py = y + 40
+        start_y = hy - total_h//2 + y_offset
 
-        for p in planets:
+        num_str = str(h)
+        bb = draw.textbbox((0,0), num_str, font=fNum)
+        draw.text((hx-(bb[2]-bb[0])//2, start_y), num_str, fill=PURPLE, font=fNum)
 
-            short = SHORT_EN.get(p.lower(), p[:2])
+        for i, abbr in enumerate(abbrs):
+            py = start_y + LINE_H*(i+1)
+            bb = draw.textbbox((0,0), abbr, font=fPlanet)
+            draw.text((hx-(bb[2]-bb[0])//2, py), abbr, fill=PURPLE, font=fPlanet)
 
-            draw.text(
-                (x, py),
-                short.lower(),
-                fill=PURPLE,
-                font=planet_font,
-                anchor="mm"
-            )
+    for h,(hx,hy) in centers.items():
+        draw_house(h, hx, hy)
 
-            py += 28
+    # Title
+    title = f"Lagna: {lagna_sign}"
+    bb = draw.textbbox((0,0), title, font=fTitle)
+    draw.text(((SIZE-(bb[2]-bb[0]))//2, 14), title, fill=BLACK, font=fTitle)
 
-    # Lagna title
-    draw.text(
-        (SIZE // 2, 35),
-        f"Lagna: {lagna_sign}",
-        fill=BLACK,
-        font=title_font,
-        anchor="mm"
-    )
+    # Redraw lines clean on top
+    draw.rectangle([L,T,R,B], outline=BLACK, width=4)
+    draw.line([tl,br], fill=BLACK, width=LW)
+    draw.line([tr,bl], fill=BLACK, width=LW)
+    draw.line([top,right],    fill=BLACK, width=LW)
+    draw.line([right,bottom], fill=BLACK, width=LW)
+    draw.line([bottom,left],  fill=BLACK, width=LW)
+    draw.line([left,top],     fill=BLACK, width=LW)
 
-    # Save image
     filename = f"chart_{uuid.uuid4().hex}.png"
-
-    img.save(filename)
-
+    img.save(filename, dpi=(150,150))
     return filename
+
+# Cancer test
+p1 = generate_chart({
+    1:["Jupiter"], 6:["Sun","Venus","Ketu"],
+    7:["Mercury"], 9:["Moon","Mars"], 12:["Saturn","Rahu"]
+}, "Cancer")
+print(f"Cancer: {p1}")
+
+# Stress test
+p2 = generate_chart({
+    1:["Jupiter","Saturn"], 2:["Sun","Moon"], 3:["Mars"],
+    4:["Mercury","Venus","Rahu"], 5:["Ketu"],
+    6:["Sun","Venus","Ketu"], 8:["Moon","Mars"],
+    11:["Saturn","Rahu"], 12:["Mars","Moon"]
+}, "Aries")
+print(f"Stress: {p2}")
+ 
 # -------------------------
 # KUNDLI API
 # -------------------------
