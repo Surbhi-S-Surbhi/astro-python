@@ -12,7 +12,7 @@ from astrology.dasha.interpretations import (
     get_mahadasha_interpretation,
     get_timeline_interpretation
 )
-from flask import Flask, request
+# from flask import Flask, request
 from astrology.dasha.engine import get_moon_longitude
 from astrology.dasha.engine import (
     get_moon_longitude,
@@ -24,19 +24,19 @@ from astrology.dasha.engine import (
     generate_antardashas,
     get_current_antardasha
 )
-from generate_chart import generate_chart
+# from generate_chart import generate_chart
 
-path = generate_chart(
-    house_data={
-        1:  ["Jupiter"],
-        4:  ["Moon", "Mars"],
-        6:  ["Sun", "Venus", "Ketu"],
-        7:  ["Mercury"],
-        9:  ["Moon", "Mars"],
-        12: ["Saturn", "Rahu"],
-    },
-    lagna_sign="Cancer"
-)
+# path = generate_chart(
+#     house_data={
+#         1:  ["Jupiter"],
+#         4:  ["Moon", "Mars"],
+#         6:  ["Sun", "Venus", "Ketu"],
+#         7:  ["Mercury"],
+#         9:  ["Moon", "Mars"],
+#         12: ["Saturn", "Rahu"],
+#     },
+#     lagna_sign="Cancer"
+# )
 # path = "chart_abc123.png"  ← the saved image file
 
 app = Flask(__name__)
@@ -250,9 +250,16 @@ SHORT_HI = {
     "ketu": "के", "lagna": "ल.", "ascendant": "ल.",
 }
 SHORT_EN = {
-    "sun": "Su", "moon": "Mo", "mars": "Ma", "mercury": "Me",
-    "jupiter": "Ju", "venus": "Ve", "saturn": "Sa", "rahu": "Ra",
-    "ketu": "Ke", "lagna": "As", "ascendant": "As",
+    "sun": "सू",
+    "moon": "चं",
+    "mars": "मं",
+    "mercury": "बु",
+    "jupiter": "गु",
+    "venus": "शु",
+    "saturn": "श",
+    "rahu": "रा",
+    "ketu": "के",
+    "lagna": "ल",
 }
 print("NEW VERSION RUNNING")
 BG_COLOR = "#FFFDF5"
@@ -298,9 +305,9 @@ def _load_fonts(size_bold, size_normal, size_num):
     ]
     candidates_latin = [
         "DejaVuSans-Bold.ttf",
-        "DejaVuSans.ttf",
+        "NotoSansDevanagari-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/NotoSansDevanagari-Bold.ttf",
     ]
 
     hindi_font_bold   = None
@@ -340,7 +347,7 @@ PURPLE = "#6A0DAD"
 BLACK  = "#111111"
 BG     = "#fffdf8"
 
-DEVA_BOLD = "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf"
+DEVA_BOLD = "fonts/NotoSansDevanagari-Bold.ttf"
 LAT_BOLD  = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
