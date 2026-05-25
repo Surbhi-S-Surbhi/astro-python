@@ -398,17 +398,17 @@ def generate_chart(house_data: dict, lagna_sign: str) -> str:
     # bias MORE toward the inner chord to stay away from the outer boundary
     centers = {
         1:  wp(P_TL, P_TR,  top,    0.62),
-        2:  wp(P_TR, top,   tr,     0.54),
-        3:  wp(P_TR, right, tr,     0.54),
-        4:  wp(P_TR, P_BR,  right,  0.62),
-        5:  wp(P_BR, right, br,     0.50),
-        6:  wp(P_BR, bottom,br,     0.50),
+        12: wp(P_TR, top,   tr,     0.54),
+        11: wp(P_TR, right, tr,     0.54),
+        10: wp(P_TR, P_BR,  right,  0.62),
+        9:  wp(P_BR, right, br,     0.50),
+        8:  wp(P_BR, bottom,br,     0.50),
         7:  wp(P_BL, P_BR,  bottom, 0.62),
-        8:  wp(P_BL, bottom,bl,     0.50),
-        9:  wp(P_BL, left,  bl,     0.50),
-        10: wp(P_TL, P_BL,  left,   0.62),
-        11: wp(P_TL, left,  tl,     0.54),
-        12: wp(P_TL, top,   tl,     0.54),
+        6:  wp(P_BL, bottom,bl,     0.50),
+        5:  wp(P_BL, left,  bl,     0.50),
+        4:  wp(P_TL, P_BL,  left,   0.62),
+        3:  wp(P_TL, left,  tl,     0.54),
+        2:  wp(P_TL, top,   tl,     0.54),
     }
 
     LINE_H = 32
