@@ -239,7 +239,7 @@ def get_house_mapping(lagna_sign):
     lagna_index = signs.index(lagna_sign)
     houses = {}
     for i in range(12):
-        sign = signs[(lagna_index + i) % 12]
+        sign = signs[(lagna_index - i) % 12]
         houses[sign] = i + 1
     return houses
 
