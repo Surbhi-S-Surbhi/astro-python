@@ -580,6 +580,9 @@ def test_moon():
     return {
         "moon_longitude": moon
     }
+@app.route('/')
+def index():
+    return "Astro Backend Running"
 
 @app.route('/test-dasha')
 def test_dasha():
