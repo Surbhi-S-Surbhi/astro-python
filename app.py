@@ -95,6 +95,10 @@ def home():
     current_mahadasha = get_current_mahadasha(
         timeline
     )
+    if current_mahadasha is None:
+        return jsonify({
+            "error": "No current Mahadasha found for this birth date"
+        }), 400
 
     # Antardashas
     antardashas = generate_antardashas(
